@@ -8,6 +8,10 @@
 
 /**
  * @include widgets/form/ComparisonComboBox.js
+ * @include data/WPSUniqueValuesReader.js
+ * @include data/WPSUniqueValuesProxy.js
+ * @include data/WPSUniqueValuesStore.js
+ * @include widgets/form/WPSUniqueValuesCombo.js
  */
 
 /** api: (define)
@@ -44,6 +48,11 @@ gxp.form.FilterField = Ext.extend(Ext.form.CompositeField, {
      * {Object}
      */
     attributesComboConfig: null,
+    
+    /**
+     * 
+     */ 
+    uniqueValuesStore : null,
 
     initComponent: function() {
                 
@@ -84,6 +93,9 @@ gxp.form.FilterField = Ext.extend(Ext.form.CompositeField, {
                 select: function(combo, record) {
                     this.items.get(1).enable();
                     this.filter.property = record.get("name");
+                    if (this.attributes) {
+                        this.loadUniqueValues(this.attributes.url, this.attributes.baseParams.TYPENAME, record.get("name"));
+                    }
                     this.fireEvent("change", this.filter);
                 },
                 // workaround for select event not being fired when tab is hit
@@ -130,12 +142,15 @@ gxp.form.FilterField = Ext.extend(Ext.form.CompositeField, {
         return new OpenLayers.Filter.Comparison();
     },
     
+    
     /**
      * Method: createFilterItems
      * Creates a panel config containing filter parts.
      */
     createFilterItems: function() {
-        
+        this.uniqueValuesStore = new gxp.data.WPSUniqueValuesStore({
+                    pageSize: 10
+                });
         return [
             this.attributesComboConfig, {
                 xtype: "gxp_comparisoncombo",
@@ -158,25 +173,51 @@ gxp.form.FilterField = Ext.extend(Ext.form.CompositeField, {
                     },
                     scope: this
                 }
-            }, {
-                xtype: "textfield",
+            }, 
+            {
+                xtype: "gxp_wpsuniquevaluescb",
+                mode: "remote", // required as the combo store shouldn't be loaded before a field name is selected
+                store: this.uniqueValuesStore,
                 disabled: true,
                 value: this.filter.value,
-                width: 50,
-                grow: true,
-                growMin: 50,
-                anchor: "100%",
+                pageSize: 10,
+                typeAhead: true,
+                forceSelection: false,
+                remoteSort: true,
+                triggerAction: "all",
                 allowBlank: this.allowBlank,
+                displayField: "value",
+                valueField: "value",
                 listeners: {
-                    change: function(el, value) {
-                        this.filter.value = value;
+                    select: function(combo, record) {
+						this.filter.value = combo.getValue();
                         this.fireEvent("change", this.filter);
                     },
                     scope: this
-                }
+                },
+                width: 150,
+                grow: true,
+                growMin: 50,
+                anchor: "100%"
             }
         ];
-    }
+    },
+    loadUniqueValues: function(url, layerName, fieldName) {
+        if (url.indexOf('wfs?', url.length - 'wfs?'.length) !== -1) { // url ends with wfs
+            var wpsUrl = url.substring(0, url.length-'wfs?'.length)+"wps";
+            var params = {
+                url: wpsUrl,
+                inputs: {
+                    layerName: layerName,
+                    fieldName: fieldName
+                },
+                start: 0,
+                limit: 10
+            };
+            this.uniqueValuesStore.setWPSParams(params);
+            this.uniqueValuesStore.load();
+        }
+	}
 
 });
 
